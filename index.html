@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<title>Lot planner</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="lock" class="wrap narrow">
+  <h1>Lot planner</h1>
+  <p class="muted">Enter your PIN to continue.</p>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="PIN" aria-label="PIN">
+  <button id="unlock" class="primary">Unlock</button>
+  <p id="lockmsg" class="err" role="alert"></p>
+</main>
+
+<main id="app" class="wrap" hidden>
+  <header class="top">
+    <h1>Lot planner</h1>
+    <button id="lockbtn" aria-label="Lock">Lock</button>
+  </header>
+
+  <section class="card">
+    <h2>Lots data</h2>
+    <p class="muted small">Import the USD exports of your open lots and closed lots from Fidelity. Files stay on this device, encrypted with your PIN.</p>
+    <input id="files" type="file" accept=".csv,text/csv" multiple hidden>
+    <div class="row"><button id="importbtn" class="primary">Import CSV files</button><button id="clearbtn">Clear data</button></div>
+    <p id="status" class="small"></p>
+    <p id="importmsg" class="small err" role="alert"></p>
+  </section>
+
+  <section class="card" id="inputs">
+    <h2>Inputs</h2>
+    <div class="grid2">
+      <label>AMZN price (USD)<input id="price" type="number" inputmode="decimal" step="0.01" min="0"></label>
+      <label>USD/INR<input id="fx" type="number" inputmode="decimal" step="0.01" min="0"></label>
+      <label>Sell date<input id="asof" type="date"></label>
+      <label>Income slab
+        <select id="slab"><option value="30">30%</option><option value="25">25%</option><option value="20">20%</option><option value="15">15%</option></select>
+      </label>
+      <label>Surcharge
+        <select id="sur"><option value="0">None</option><option value="10">10%</option><option value="15">15%</option><option value="25">25%</option></select>
+      </label>
+      <label>Other income, yearly (optional)<input id="inc" type="number" inputmode="numeric" step="100000" min="0" placeholder="Salary etc."></label>
+    </div>
+    <p class="small muted">Tax rates used: short-term <b id="rst">-</b>, long-term <b id="rlt">-</b> (includes 4% cess).</p>
+
+    <div class="seg" role="radiogroup" aria-label="Mode">
+      <button id="m-exp" role="radio" aria-checked="true" class="on">Cash after tax</button>
+      <button id="m-house" role="radio" aria-checked="false">House (gross)</button>
+    </div>
+    <p id="modehelp" class="small muted"></p>
+
+    <label class="sl">Amount needed <output id="tv"></output>
+      <input id="target" type="range" min="1" max="60" step="0.5" value="8">
+    </label>
+    <label class="sl">What-if price <output id="pvv"></output>
+      <span class="row nowrap"><input id="pslide" type="range" min="150" max="400" step="1" value="250"><button id="play" aria-label="Play price sweep">Play</button></span>
+    </label>
+  </section>
+
+  <section class="card" id="result">
+    <h2>Plan</h2>
+    <p id="warn" class="err small" role="alert"></p>
+    <div class="cards4">
+      <div class="m"><small id="l1">Units to sell</small><b id="v1">-</b></div>
+      <div class="m"><small id="l2">Gross</small><b id="v2">-</b></div>
+      <div class="m"><small id="l3">Tax</small><b id="v3">-</b></div>
+      <div class="m"><small id="l4">Cash after tax</small><b id="v4">-</b></div>
+    </div>
+    <p class="small muted mixl">Mix of units sold</p>
+    <div class="mix"><div id="bs"></div><div id="bl"></div></div>
+    <p class="small muted" id="mixtxt"></p>
+    <div id="notes"></div>
+  </section>
+
+  <section class="card">
+    <h2>Sell these lots</h2>
+    <div class="tw"><table id="sell"><thead><tr><th>Lot</th><th>Term</th><th>Units</th><th>Gross</th><th>Gain</th><th>Tax</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Tax per unit by lot</h2>
+    <div class="lg"><span><i class="sw st"></i>Short-term</span><span><i class="sw lt"></i>Long-term</span><span><i class="sw dim"></i>Not sold</span></div>
+    <div id="bars"></div>
+  </section>
+
+  <p class="small muted foot">Estimates only, not tax advice. Gains use SBI TT buying rates on vest and sale dates. Long-term means held 24 months or more. Check the house exemption conditions and the rate convention with your CA.</p>
+</main>
+
+<script src="config.js"></script>
+<script src="rates.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
