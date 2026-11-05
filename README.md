@@ -5,3 +5,5 @@ Static web app that picks which RSU lots to sell for a target amount under India
 - Import the USD open-lots and closed-lots CSV exports from Fidelity. They are stored encrypted in the browser on your own device and are never uploaded.
 - Access is gated by a PIN (PBKDF2 hash check in the page). This only deters casual viewing; the repo contains no personal data.
 - Estimates only, not tax advice.
+
+Open the site in a browser, enter the PIN, then import your CSV files.
