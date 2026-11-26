@@ -102,6 +102,32 @@ function plan(open, o) {
   return { G: G, lots: L, pool: pool, units: units, gross: gross, tax: tax, gain: gain, cash: gross - tax, st: st, lt: ltu, short: got + 1 < o.target, got: got };
 }
 
+// Indian set-off: short-term loss offsets short-term then long-term gains; long-term loss offsets long-term gains only.
+function yearTax(st, lt, o) { return Math.max(st, 0) * o.st + Math.max(lt + Math.min(st, 0), 0) * o.lt; }
+
+// plan() with loss set-off against this sale's gains and gains already realized this year (base = {st, lt}).
+// In expense mode the target is the cash after the set-off tax, so fewer units may be needed.
+function netPlan(open, o, base) {
+  base = base || { st: 0, lt: 0 };
+  function inc(p) {
+    var s = 0, l = 0;
+    p.pool.forEach(function (x) { if (x.take > 0) { if (x.lt) l += x.take * x.gainU; else s += x.take * x.gainU; } });
+    return yearTax(base.st + s, base.lt + l, o) - yearTax(base.st, base.lt, o);
+  }
+  var p0 = plan(open, o), p = p0, net = inc(p0);
+  if (o.mode !== 'house') {
+    var t = o.target;
+    for (var n = 0; n < 12; n++) {
+      var t2 = o.target - (p.tax - net);
+      if (Math.abs(t2 - t) < 0.5) break;
+      var o2 = {}; for (var k in o) o2[k] = o[k]; o2.target = t = t2;
+      p = plan(open, o2); net = inc(p);
+    }
+  }
+  p.taxNet = net; p.setoff = p.tax - net; p.cashNet = p.gross - net; p.unitsNoSet = p0.units;
+  return p;
+}
+
 function waitInsight(open, o, base) {
   if (o.mode !== 'expense' || !base) return null;
   var lim = addDays(o.asof, 75), ds = {};
@@ -128,7 +154,7 @@ function realized(closed, o) {
   return { fy: fy, lt: lt, st: st, n: n, tax: stTax + ltTax, taxable: Math.max(st, 0) + ltNet };
 }
 
-window.LPCore = { parseCSV: parseCSV, parseLotsText: parseLotsText, plan: plan, rateOn: rateOn, isLT: isLT, realized: realized, waitInsight: waitInsight };
+window.LPCore = { parseCSV: parseCSV, parseLotsText: parseLotsText, plan: plan, netPlan: netPlan, yearTax: yearTax, rateOn: rateOn, isLT: isLT, realized: realized, waitInsight: waitInsight };
 
 var DEF = { price: '', fx: '', asof: '', slab: 30, sur: 10, inc: '', mode: 'expense', target: 8 };
 var state = { open: [], closed: [], openAt: null, closedAt: null, s: {} };
@@ -199,12 +225,13 @@ function render() {
     return;
   }
   var o = { price: price, fx: fx, asof: asof, mode: mode, target: tgtL * 1e5, st: r.st, lt: r.lt };
-  var p = plan(state.open, o);
+  var ra = state.closed.length ? realized(state.closed, o) : null;
+  var p = netPlan(state.open, o, ra);
   $('l1').textContent = 'Units to sell'; $('l2').textContent = 'Gross sale';
   if (mode === 'house') { $('l3').textContent = 'Tax if no exemption'; $('l4').textContent = 'Tax if exemption holds'; }
   else { $('l3').textContent = 'Tax'; $('l4').textContent = 'Cash after tax'; }
-  $('v1').textContent = p.units.toFixed(2); $('v2').textContent = inr(p.gross); $('v3').textContent = inr(p.tax);
-  $('v4').textContent = mode === 'house' ? inr(0) : inr(p.cash);
+  $('v1').textContent = p.units.toFixed(2); $('v2').textContent = inr(p.gross); $('v3').textContent = inr(p.taxNet);
+  $('v4').textContent = mode === 'house' ? inr(0) : inr(p.cashNet);
   if (p.short) $('warn').textContent = 'Eligible lots raise only ' + lakh(p.got) + (mode === 'house' ? ' gross' : ' after tax') + ' at this price and date.';
   var tot = p.st + p.lt;
   if (tot > 0) { $('bs').style.width = (p.st / tot * 100) + '%'; $('bl').style.width = (p.lt / tot * 100) + '%'; }
@@ -215,8 +242,13 @@ function render() {
     [fmtM(x.date), x.lt ? 'LT' : 'ST', x.take.toFixed(3), inr(x.take * p.G), inr(x.take * x.gainU), inr(x.take * x.taxU)].forEach(function (t) { tr.appendChild(el('td', null, t)); });
     tb.appendChild(tr);
   });
+  if (p.setoff > 0.5) {
+    var so = el('tr');
+    ['Loss set-off', '', '', '', '', '-' + inr(p.setoff)].forEach(function (t) { so.appendChild(el('td', null, t)); });
+    tb.appendChild(so);
+  }
   var tr = el('tr'); tr.style.fontWeight = '500';
-  ['Total', '', p.units.toFixed(3), inr(p.gross), inr(p.gain), inr(p.tax)].forEach(function (t) { tr.appendChild(el('td', null, t)); });
+  ['Total', '', p.units.toFixed(3), inr(p.gross), inr(p.gain), inr(p.taxNet)].forEach(function (t) { tr.appendChild(el('td', null, t)); });
   tb.appendChild(tr);
 
   var maxT = Math.max.apply(null, p.lots.map(function (x) { return x.taxU; }).concat([1]));
@@ -232,12 +264,15 @@ function render() {
 
   function note(t) { notes.appendChild(el('div', 'note', t)); }
   var zero = p.pool.filter(function (x) { return x.take > 0.0005 && x.taxU === 0; }).length;
-  if (zero) note(zero + ' of the lots sold are at or below cost, so they pay no tax.');
+  if (zero) note(zero + ' of the lots sold are at or below cost, so they pay no tax' + (p.setoff > 0.5 ? '; their losses count toward the set-off below.' : '.'));
   var w = waitInsight(state.open, o, p);
   if (w) note('If you can wait until ' + fmtD(w.d) + ', more lots turn long-term: tax drops to ' + inr(w.p.tax) + ' (saves ' + inr(p.tax - w.p.tax) + ') at the same price.');
-  var ra = state.closed.length ? realized(state.closed, o) : null;
+  if (p.setoff > 0.5) {
+    var fewer = p.unitsNoSet - p.units;
+    note('Loss set-off: short-term losses offset gains' + (ra ? ' (this sale and those realized this year)' : ' in this sale') + ', cutting tax by ' + inr(p.setoff) + ' to ' + inr(p.taxNet) + (mode === 'house' ? '.' : fewer > 0.005 ? ', so you sell ' + fewer.toFixed(2) + ' fewer units.' : '.') + (ra ? '' : ' Import closed lots to also set off against gains already realized this year.'));
+  }
   if (ra) {
-    note('Realized since ' + fmtD(ra.fy) + ': long-term ' + inr(ra.lt) + ', short-term ' + inr(ra.st) + ' (' + ra.n + ' rows). Estimated tax on these is ' + inr(ra.tax) + '. With this sale the year total is about ' + inr(ra.tax + p.tax) + '; keep advance tax in line (Jun 15, Sep 15, Dec 15, Mar 15).');
+    note('Realized since ' + fmtD(ra.fy) + ': long-term ' + inr(ra.lt) + ', short-term ' + inr(ra.st) + ' (' + ra.n + ' rows). Estimated tax on these is ' + inr(ra.tax) + '. With this sale the year total is about ' + inr(ra.tax + p.taxNet) + '; keep advance tax in line (Jun 15, Sep 15, Dec 15, Mar 15).');
   }
   var inc = +S('inc');
   if (inc > 0) {
